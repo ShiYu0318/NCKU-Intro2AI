@@ -1,4 +1,15 @@
-"""Starter code for the Unknown-Map Exploration Agent assignment."""
+"""
+Unknown-Map Exploration Agent：frontier-based exploration。
+
+每一步：
+1. 把感知到的四個鄰居寫進自己的已知地圖。
+2. 目標在旁邊就直接走進去。
+3. 否則在「已知可走」的格子上做 BFS，找出所有 frontier
+   （已知可走、但還有未知鄰居的格子），挑成本最低的那個，回傳通往它的第一步。
+
+只走已知可走的格子，所以碰撞次數永遠是 0。
+frontier 成本 = 距離 − 資訊增益 − 離起點的遠近（目標通常放在離起點很遠的地方）。
+"""
 
 from collections import deque
 
@@ -38,8 +49,6 @@ class Agent:
         self.start_position = tuple(start_position)
         # 已知地圖：(row, col) -> "FREE" / "WALL" / "GOAL"；不在 dict 裡就是未知
         self.known = {self.start_position: "FREE"}
-        # 實際站過的格子
-        self.visited = set()
 
     def act(self, percept):
         """
@@ -142,7 +151,6 @@ class Agent:
         """用感知更新已知地圖，回傳目前位置。"""
         position = tuple(percept["position"])
         self.known[position] = "FREE"
-        self.visited.add(position)
         for action, status in percept["neighbors"].items():
             self.known[self._step(position, action)] = status
         return position
