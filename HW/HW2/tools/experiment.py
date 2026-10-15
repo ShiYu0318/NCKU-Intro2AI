@@ -64,14 +64,53 @@ VARIANTS = {
     "r2 a.5 + b.5": combo(0.5, 2, 0.5),
     "r3 a.2 + b.5": combo(0.2, 3, 0.5),
     "r3 a.3 + b.5": combo(0.3, 3, 0.5),
+    # 第三輪：very_far 地圖上，先驗再加重
+    "r2 a.5 + b1": combo(0.5, 2, 1.0),
+    "r2 a.5 + b2": combo(0.5, 2, 2.0),
+    "r2 a.5 + b3": combo(0.5, 2, 3.0),
+    # 第四輪：先驗改用已知路徑距離
+    "manhattan a.4 b.75": combo(0.4, 2, 0.75),
 }
 
 
+class PathPrior(Agent):
+    """先驗改用「從起點沿已知 FREE 格子走到 frontier 的 BFS 距離」。"""
+
+    a_coef, radius, b_coef, mix = 0.4, 2, 0.75, 1.0  # mix=1 純路徑距離，0 純曼哈頓
+
+    def act(self, percept):
+        self._observe(percept)
+        self._start_dist, _ = self._bfs(self.start_position)
+        self._start_dist[self.start_position] = 0
+        return super().act(percept)
+
+    def _frontier_cost(self, cell, distance):
+        prior = self.mix * self._start_dist.get(cell, 0) + (1 - self.mix) * far_from_start(self, cell)
+        return distance - self.a_coef * unknown_within(self, cell, self.radius) - self.b_coef * prior
+
+
+def path_prior(a_coef, radius, b_coef, mix):
+    return type("PathPrior", (PathPrior,), dict(a_coef=a_coef, radius=radius, b_coef=b_coef, mix=mix))
+
+
+VARIANTS.update({
+    "path a.4 b.75": path_prior(0.4, 2, 0.75, 1.0),
+    "path a.4 b1": path_prior(0.4, 2, 1.0, 1.0),
+    "mix.5 a.4 b.75": path_prior(0.4, 2, 0.75, 0.5),
+    "mix.5 a.4 b1": path_prior(0.4, 2, 1.0, 0.5),
+})
+
+
 def main():
-    dirs = [Path(p) for p in sys.argv[1:]] or [HW2_DIR / "maps"]
+    # --only=子字串：只跑名稱包含該字串的變體（可用逗號分隔多個）
+    only = [a.split("=", 1)[1].split(",") for a in sys.argv[1:] if a.startswith("--only=")]
+    only = only[0] if only else None
+    dirs = [Path(p) for p in sys.argv[1:] if not p.startswith("--")] or [HW2_DIR / "maps"]
     print(f"{'variant':<18}" + "".join(f"{d.name:>10}" for d in dirs))
     for name, fn in VARIANTS.items():
-        cls = make_variant(name, fn)
+        if only and not any(key in name for key in only):
+            continue
+        cls = fn if isinstance(fn, type) else make_variant(name, fn)
         cells = []
         for d in dirs:
             results = evaluate_dir(d, cls())

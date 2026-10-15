@@ -1,7 +1,7 @@
 """隨機地圖產生器：模仿公開地圖的三種 style，用來避免只對公開地圖調參。
 
 用法（在 HW2/ 底下）：
-    python3 tools/gen_maps.py OUT_DIR [--count N] [--seed S] [--goal far|uniform]
+    python3 tools/gen_maps.py OUT_DIR [--count N] [--seed S] [--goal far|very_far|uniform]
 
 每種尺寸（10/15/20）× 每種 style（open/dead_ends/loops_dense）各產生 N 張。
 同一個 seed 會產生完全相同的地圖，方便重現實驗。
@@ -95,6 +95,9 @@ def make_map(rng: random.Random, n: int, style: str, goal_mode: str, name: str) 
             continue
         if goal_mode == "far":
             candidates = candidates[len(candidates) // 2 :]
+        elif goal_mode == "very_far":
+            # 公開地圖的目標落在距離第 83~99 百分位，這個模式最接近
+            candidates = candidates[len(candidates) * 4 // 5 :]
         goal = rng.choice(candidates)[1]
         return {
             "name": name,
@@ -112,7 +115,7 @@ def main():
     parser.add_argument("out_dir")
     parser.add_argument("--count", type=int, default=10)
     parser.add_argument("--seed", type=int, default=0)
-    parser.add_argument("--goal", choices=("far", "uniform"), default="far")
+    parser.add_argument("--goal", choices=("far", "very_far", "uniform"), default="far")
     args = parser.parse_args()
 
     rng = random.Random(args.seed)
