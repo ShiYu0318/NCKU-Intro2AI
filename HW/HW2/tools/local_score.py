@@ -81,6 +81,23 @@ def evaluate_dir(map_dir: Path, agent: Agent | None = None) -> list[dict]:
     ]
 
 
+def print_summary(results: list[dict]) -> None:
+    """只印各 style / 尺寸的平均，適合大量地圖。"""
+    groups: dict[str, list[dict]] = {}
+    for r in results:
+        size = r["map"].split("_")[-2] if r["map"].count("_") >= 2 else "?"
+        groups.setdefault(f"{r['style']:<12} {size:>2}", []).append(r)
+    for key in sorted(groups):
+        rs = groups[key]
+        avg = sum(r["score"] for r in rs) / len(rs)
+        fail = sum(not r["success"] for r in rs)
+        coll = sum(r["collisions"] for r in rs)
+        ratio = sum(r["optimal"] / max(1, r["steps"] - r["collisions"]) for r in rs) / len(rs)
+        print(f"{key}  n={len(rs):<4} avg={avg:6.2f}  eff={ratio:.3f}  fail={fail}  coll={coll}")
+    avg = sum(r["score"] for r in results) / len(results)
+    print(f"ALL               n={len(results):<4} avg={avg:6.2f}")
+
+
 def print_report(results: list[dict]) -> None:
     header = f"{'map':<22}{'style':<14}{'ok':<4}{'steps':>6}{'coll':>6}{'opt':>5}{'score':>8}"
     print(header)
@@ -97,5 +114,10 @@ def print_report(results: list[dict]) -> None:
 
 
 if __name__ == "__main__":
-    target = Path(sys.argv[1]) if len(sys.argv) > 1 else HW2_DIR / "maps"
-    print_report(evaluate_dir(target))
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    target = Path(args[0]) if args else HW2_DIR / "maps"
+    results = evaluate_dir(target)
+    if "--summary" in sys.argv:
+        print_summary(results)
+    else:
+        print_report(results)
