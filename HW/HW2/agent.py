@@ -15,7 +15,7 @@ class Agent:
         You can declare any required instance variables here,
         but the state for each new map should be reinitialized in reset().
         """
-        pass
+        self.reset(0, 0, (0, 0))
 
     def reset(self, rows, cols, start_position):
         """
@@ -26,10 +26,13 @@ class Agent:
             cols: 地圖欄數
             start_position: 起點座標 (row, col)
         """
-        # TODO: initialize your internal map and search state.
         self.rows = rows
         self.cols = cols
         self.start_position = tuple(start_position)
+        # 已知地圖：(row, col) -> "FREE" / "WALL" / "GOAL"；不在 dict 裡就是未知
+        self.known = {self.start_position: "FREE"}
+        # 實際站過的格子
+        self.visited = set()
 
     def act(self, percept):
         """
@@ -46,10 +49,35 @@ class Agent:
                         "RIGHT": "FREE" | "WALL" | "GOAL",
                     },
                 }
-        
+
         Returns:
             One of: UP, DOWN, LEFT, RIGHT
         """
-        # TODO: replace this placeholder policy.
-        # 策略：保證成功 -> 零碰撞 -> 提升效率
-        return "UP"
+        position = self._observe(percept)
+        neighbors = percept["neighbors"]
+
+        # 規則一：目標就在旁邊，直接走進去
+        for action, status in neighbors.items():
+            if status == "GOAL":
+                return action
+
+        # 規則二：只考慮 FREE 的方向，永遠不撞牆
+        free = [a for a, s in neighbors.items() if s == "FREE"]
+        unvisited = [a for a in free if self._step(position, a) not in self.visited]
+        if unvisited:
+            return unvisited[0]
+        return free[0]
+
+    def _observe(self, percept):
+        """用感知更新已知地圖，回傳目前位置。"""
+        position = tuple(percept["position"])
+        self.known[position] = "FREE"
+        self.visited.add(position)
+        for action, status in percept["neighbors"].items():
+            self.known[self._step(position, action)] = status
+        return position
+
+    @staticmethod
+    def _step(position, action):
+        dr, dc = MOVES[action]
+        return (position[0] + dr, position[1] + dc)
