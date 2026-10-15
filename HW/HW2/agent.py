@@ -1,5 +1,7 @@
 """Starter code for the Unknown-Map Exploration Agent assignment."""
 
+from collections import deque
+
 MOVES = {
     "UP": (-1, 0),
     "DOWN": (1, 0),
@@ -33,8 +35,6 @@ class Agent:
         self.known = {self.start_position: "FREE"}
         # 實際站過的格子
         self.visited = set()
-        # DFS 的回溯路徑：從起點到目前位置的上一格
-        self.stack = []
 
     def act(self, percept):
         """
@@ -63,16 +63,37 @@ class Agent:
             if status == "GOAL":
                 return action
 
-        # 規則二：只考慮 FREE 的方向，永遠不撞牆
-        for action, status in neighbors.items():
-            if status == "FREE" and self._step(position, action) not in self.visited:
-                # 往前探索：記住來時的格子，之後才能退回來
-                self.stack.append(position)
-                return action
+        # 規則二：在已知 FREE 格子上 BFS，走向最近的 frontier（只走已知 FREE，所以不會撞牆）
+        first_action = {}
+        queue = deque()
+        for action in MOVES:
+            nxt = self._step(position, action)
+            if self.known.get(nxt) == "FREE":
+                first_action[nxt] = action
+                queue.append(nxt)
+        while queue:
+            cell = queue.popleft()
+            if self._is_frontier(cell):
+                return first_action[cell]
+            for action in MOVES:
+                nxt = self._step(cell, action)
+                if self.known.get(nxt) == "FREE" and nxt not in first_action and nxt != position:
+                    first_action[nxt] = first_action[cell]
+                    queue.append(nxt)
 
-        # 死路：沿原路退一格
-        parent = self.stack.pop()
-        return self._direction(position, parent)
+        # 理論上不會發生（目標一定可達）；保險起見回傳一個不撞牆的方向
+        for action, status in neighbors.items():
+            if status == "FREE":
+                return action
+        return "UP"
+
+    def _is_frontier(self, cell):
+        """已知 FREE、而且還有地圖內的未知鄰居：站上去才會看到新東西。"""
+        for action in MOVES:
+            r, c = self._step(cell, action)
+            if 0 <= r < self.rows and 0 <= c < self.cols and (r, c) not in self.known:
+                return True
+        return False
 
     def _observe(self, percept):
         """用感知更新已知地圖，回傳目前位置。"""
@@ -87,12 +108,3 @@ class Agent:
     def _step(position, action):
         dr, dc = MOVES[action]
         return (position[0] + dr, position[1] + dc)
-
-    @staticmethod
-    def _direction(src, dst):
-        """相鄰兩格之間的移動方向。"""
-        delta = (dst[0] - src[0], dst[1] - src[1])
-        for action, move in MOVES.items():
-            if move == delta:
-                return action
-        raise ValueError(f"{src} and {dst} are not adjacent")
