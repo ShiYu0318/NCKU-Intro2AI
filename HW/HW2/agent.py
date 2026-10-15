@@ -10,6 +10,11 @@ MOVES = {
 }
 
 class Agent:
+    # frontier 評分參數（由 tools/experiment.py 在隨機地圖上實驗選出）
+    INFO_RADIUS = 2    # 計算資訊增益時看的曼哈頓半徑
+    INFO_WEIGHT = 0.4  # 周圍每多一個未知格，成本少多少
+    FAR_WEIGHT = 0.75  # 離起點每遠一格，成本少多少（目標通常離起點很遠）
+
     def __init__(self):
         """
         Initialize the Agent.
@@ -77,8 +82,26 @@ class Agent:
         return "UP"
 
     def _frontier_cost(self, cell, distance):
-        """frontier 的成本，越低越優先。"""
-        return distance
+        """
+        frontier 的成本，越低越優先：
+            走過去的步數
+            - INFO_WEIGHT × 周圍的未知格數（資訊增益：去了能看到更多）
+            - FAR_WEIGHT × 離起點的曼哈頓距離（先驗：目標通常在遠處）
+        """
+        far = abs(cell[0] - self.start_position[0]) + abs(cell[1] - self.start_position[1])
+        return distance - self.INFO_WEIGHT * self._unknown_near(cell) - self.FAR_WEIGHT * far
+
+    def _unknown_near(self, cell):
+        """cell 周圍曼哈頓距離 <= INFO_RADIUS、在地圖內且未知的格子數。"""
+        r0, c0 = cell
+        radius = self.INFO_RADIUS
+        count = 0
+        for r in range(max(0, r0 - radius), min(self.rows, r0 + radius + 1)):
+            span = radius - abs(r - r0)
+            for c in range(max(0, c0 - span), min(self.cols, c0 + span + 1)):
+                if (r, c) not in self.known:
+                    count += 1
+        return count
 
     def _bfs(self, position):
         """
