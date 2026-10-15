@@ -63,29 +63,49 @@ class Agent:
             if status == "GOAL":
                 return action
 
-        # 規則二：在已知 FREE 格子上 BFS，走向最近的 frontier（只走已知 FREE，所以不會撞牆）
-        first_action = {}
-        queue = deque()
-        for action in MOVES:
-            nxt = self._step(position, action)
-            if self.known.get(nxt) == "FREE":
-                first_action[nxt] = action
-                queue.append(nxt)
-        while queue:
-            cell = queue.popleft()
-            if self._is_frontier(cell):
-                return first_action[cell]
-            for action in MOVES:
-                nxt = self._step(cell, action)
-                if self.known.get(nxt) == "FREE" and nxt not in first_action and nxt != position:
-                    first_action[nxt] = first_action[cell]
-                    queue.append(nxt)
+        # 規則二：在已知 FREE 格子上 BFS，走向成本最低的 frontier（只走已知 FREE，所以不會撞牆）
+        dist, first_action = self._bfs(position)
+        frontiers = [cell for cell in dist if self._is_frontier(cell)]
+        if frontiers:
+            target = min(frontiers, key=lambda cell: self._frontier_cost(cell, dist[cell]))
+            return first_action[target]
 
         # 理論上不會發生（目標一定可達）；保險起見回傳一個不撞牆的方向
         for action, status in neighbors.items():
             if status == "FREE":
                 return action
         return "UP"
+
+    def _frontier_cost(self, cell, distance):
+        """frontier 的成本，越低越優先。"""
+        return distance
+
+    def _bfs(self, position):
+        """
+        從目前位置在已知 FREE 格子上做 BFS。
+
+        Returns:
+            dist: 格子 -> 最短步數（不含目前位置，依 BFS 順序插入）
+            first_action: 格子 -> 走向它時，從目前位置出發的第一步
+        """
+        dist = {}
+        first_action = {}
+        queue = deque()
+        for action in MOVES:
+            nxt = self._step(position, action)
+            if self.known.get(nxt) == "FREE":
+                dist[nxt] = 1
+                first_action[nxt] = action
+                queue.append(nxt)
+        while queue:
+            cell = queue.popleft()
+            for action in MOVES:
+                nxt = self._step(cell, action)
+                if self.known.get(nxt) == "FREE" and nxt not in dist and nxt != position:
+                    dist[nxt] = dist[cell] + 1
+                    first_action[nxt] = first_action[cell]
+                    queue.append(nxt)
+        return dist, first_action
 
     def _is_frontier(self, cell):
         """已知 FREE、而且還有地圖內的未知鄰居：站上去才會看到新東西。"""
