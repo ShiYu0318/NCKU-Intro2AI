@@ -1,14 +1,16 @@
 """
-Unknown-Map Exploration Agent：frontier-based exploration。
+因為 score = 80 + 20 × min(1, optimal / movement_steps) − min(10, collisions)
+所以我的做法是先保證能成功走到目標 然後做到完全避免碰撞 最後再想辦法用演算法提升效率
+
+Unknown-Map Exploration Agent: frontier-based exploration
 
 每一步：
-1. 把感知到的四個鄰居寫進自己的已知地圖。
-2. 目標在旁邊就直接走進去。
-3. 否則在「已知可走」的格子上做 BFS，找出所有 frontier
-   （已知可走、但還有未知鄰居的格子），挑成本最低的那個，回傳通往它的第一步。
+1. 把感知到的四個鄰居寫進自己的已知地圖
+2. 目標在旁邊就直接走進去
+3. 否則在 已知可走 的格子上做 BFS 找出所有 frontier（已知可走但還有未知鄰居的格子）挑成本最低的那個回傳通往它的第一步
 
-只走已知可走的格子，所以碰撞次數永遠是 0。
-frontier 成本 = 距離 − 資訊增益 − 離起點的遠近（目標通常放在離起點很遠的地方）。
+因為只走已知可走的格子 所以碰撞次數永遠是 0
+frontier 成本 = 距離 - 資訊增益 - 離起點的遠近
 """
 
 from collections import deque
@@ -21,10 +23,10 @@ MOVES = {
 }
 
 class Agent:
-    # frontier 評分參數（由 tools/experiment.py 在隨機地圖上實驗選出）
+    # 經過在隨機地圖上實驗選出的 frontier 評分參數
     INFO_RADIUS = 2    # 計算資訊增益時看的曼哈頓半徑
-    INFO_WEIGHT = 0.4  # 周圍每多一個未知格，成本少多少
-    FAR_WEIGHT = 0.75  # 離起點每遠一格，成本少多少（目標通常離起點很遠）
+    INFO_WEIGHT = 0.4    # 周圍每多一個未知格成本少多少
+    FAR_WEIGHT = 0.75    # 離起點每遠一格成本少多少
 
     def __init__(self):
         """
@@ -72,19 +74,19 @@ class Agent:
         position = self._observe(percept)
         neighbors = percept["neighbors"]
 
-        # 規則一：目標就在旁邊，直接走進去
+        # 目標在旁邊就直接走進去
         for action, status in neighbors.items():
             if status == "GOAL":
                 return action
 
-        # 規則二：在已知 FREE 格子上 BFS，走向成本最低的 frontier（只走已知 FREE，所以不會撞牆）
+        # 在已知 FREE 格子上做 BFS 走向成本最低的 frontier 因為只走已知 FREE 所以保證不會撞牆
         dist, first_action = self._bfs(position)
         frontiers = [cell for cell in dist if self._is_frontier(cell)]
         if frontiers:
             target = min(frontiers, key=lambda cell: self._frontier_cost(cell, dist[cell]))
             return first_action[target]
 
-        # 理論上不會發生（目標一定可達）；保險起見回傳一個不撞牆的方向
+        # 理論上不會發生因為目標一定可達但是保險起見回傳一個不撞牆的方向
         for action, status in neighbors.items():
             if status == "FREE":
                 return action
@@ -92,16 +94,16 @@ class Agent:
 
     def _frontier_cost(self, cell, distance):
         """
-        frontier 的成本，越低越優先：
+        frontier 的成本 越低越優先：
             走過去的步數
-            - INFO_WEIGHT × 周圍的未知格數（資訊增益：去了能看到更多）
-            - FAR_WEIGHT × 離起點的曼哈頓距離（先驗：目標通常在遠處）
+            - INFO_WEIGHT x 周圍的未知格數（資訊增益：去了能看到更多）
+            - FAR_WEIGHT x 離起點的曼哈頓距離（先驗：目標通常在遠處）
         """
         far = abs(cell[0] - self.start_position[0]) + abs(cell[1] - self.start_position[1])
         return distance - self.INFO_WEIGHT * self._unknown_near(cell) - self.FAR_WEIGHT * far
 
     def _unknown_near(self, cell):
-        """cell 周圍曼哈頓距離 <= INFO_RADIUS、在地圖內且未知的格子數。"""
+        """cell 周圍曼哈頓距離 <= INFO_RADIUS、在地圖內且未知的格子數"""
         r0, c0 = cell
         radius = self.INFO_RADIUS
         count = 0
@@ -117,8 +119,8 @@ class Agent:
         從目前位置在已知 FREE 格子上做 BFS。
 
         Returns:
-            dist: 格子 -> 最短步數（不含目前位置，依 BFS 順序插入）
-            first_action: 格子 -> 走向它時，從目前位置出發的第一步
+            dist: 格子 -> 最短步數（不含目前位置 依 BFS 順序插入）
+            first_action: 格子 -> 走向它時 從目前位置出發的第一步
         """
         dist = {}
         first_action = {}
@@ -140,7 +142,7 @@ class Agent:
         return dist, first_action
 
     def _is_frontier(self, cell):
-        """已知 FREE、而且還有地圖內的未知鄰居：站上去才會看到新東西。"""
+        """已知 FREE 而且還有地圖內的未知鄰居 站上去才會看到新東西"""
         for action in MOVES:
             r, c = self._step(cell, action)
             if 0 <= r < self.rows and 0 <= c < self.cols and (r, c) not in self.known:
@@ -148,7 +150,7 @@ class Agent:
         return False
 
     def _observe(self, percept):
-        """用感知更新已知地圖，回傳目前位置。"""
+        """用感知更新已知地圖 回傳目前位置"""
         position = tuple(percept["position"])
         self.known[position] = "FREE"
         for action, status in percept["neighbors"].items():
