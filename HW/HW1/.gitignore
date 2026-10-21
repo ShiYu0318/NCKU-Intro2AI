@@ -7,6 +7,6 @@
 *.out
 *.xdv
 *.synctex.gz
-main.pdf
-main.tex
-refs.bib
+/main.pdf
+/main.tex
+/refs.bib
