@@ -7,6 +7,9 @@
 *.out
 *.xdv
 *.synctex.gz
+
+# Kept private until the AI CUP 2026 competition ends (Private phase closes 2026-12-04);
+# remove these lines and push everything afterwards.
 /main.pdf
 /main.tex
 /refs.bib
