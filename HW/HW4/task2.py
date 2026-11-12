@@ -17,9 +17,14 @@ H = np.array([[1., 0., 0., 0.],
 
 def make_matrices():
     """請自行建立並調整"""
-    P0 = None  # TODO 初始狀態 [x, y, vx, vy] 有多不確定
-    Q = None   # TODO 等速模型每一秒可能預測錯多少
-    R = None   # TODO GPS 量測雜訊
+    # 初始位置由 GPS 決定（不確定度約等於 GPS 雜訊 5 m），初速設為 0，不確定度較大
+    P0 = np.diag([25., 25., 4.0, 4.0])
+    # 離散白雜訊加速度模型（dt = 1）：加速度變異數 q
+    q = 1e-05
+    G = np.array([[0.5, 0.], [0., 0.5], [1., 0.], [0., 1.]])
+    Q = q * G @ G.T
+    # GPS 每軸標準差約 5 m
+    R = np.eye(2) * 25.
     return P0, Q, R
 
 
@@ -30,7 +35,16 @@ class Tracker:
         self.P0, self.Q, self.R = make_matrices()
         self.filters = {}
 
-        # TODO：為每位外送員建立 Kalman Filter
+        # 為每位外送員建立 Kalman Filter
+        for did in self.driver_ids:
+            kf = KalmanFilter(dim_x=4, dim_z=2)
+            kf.F = F.copy()
+            kf.H = H.copy()
+            kf.P = self.P0.copy()
+            kf.Q = self.Q.copy()
+            kf.R = self.R.copy()
+            self.filters[did] = kf
+        self.initialized = {did: False for did in self.driver_ids}
 
     def step(self, observations):
         """
@@ -61,5 +75,19 @@ class Tracker:
 
             3. 回傳所有外送員的估計位置。
         """
-        # TODO：完成上述追蹤流程
-        raise NotImplementedError("請完成 Tracker.step()")
+        estimates = {}
+        for did in self.driver_ids:
+            kf = self.filters[did]
+            z = observations.get(did)
+            if not self.initialized[did]:
+                # 第一次收到 GPS：用 GPS 初始化位置，速度設為 0
+                if z is not None:
+                    kf.x = np.array([float(z[0]), float(z[1]), 0., 0.])
+                    kf.P = self.P0.copy()
+                    self.initialized[did] = True
+            else:
+                kf.predict()
+                if z is not None:
+                    kf.update(np.array([float(z[0]), float(z[1])]))
+            estimates[did] = (float(kf.x[0]), float(kf.x[1]))
+        return estimates

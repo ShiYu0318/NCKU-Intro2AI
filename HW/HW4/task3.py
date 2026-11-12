@@ -16,12 +16,34 @@ H = np.array([[1., 0., 0., 0.],
               [0., 1., 0., 0.]])
 
 
+# Task 3：直線行駛、只有速率會改變 → 加速度幾乎都沿著行進方向（切向大、法向極小）
+Q_ALONG = 0.18     # 沿行進方向（切向）的加速度變異數
+Q_ACROSS = 0.00034   # 垂直行進方向（法向）的加速度變異數
+Q_POS = 0.11      # 額外的位置隨機擾動變異數
+# 白雜訊加速度模型（dt = 1）：加速度 a 對狀態的影響為 G @ a
+G = np.array([[0.5, 0.], [0., 0.5], [1., 0.], [0., 1.]])
+
+
 def make_matrices():
     """請自行建立並調整"""
-    P0 = None  # TODO 初始狀態 [x, y, vx, vy] 有多不確定
-    Q = None   # TODO 等速模型每一秒可能預測錯多少
-    R = None   # TODO GPS 量測雜訊
+    # 初始位置由 GPS 決定（不確定度 ≈ GPS 雜訊 5 m）；初速設為 0，其不確定度約為真實速度的變異
+    P0 = np.diag([25., 25., 4.6, 4.6])
+    # 基準 Q：方向未知時使用等向的加速度雜訊
+    Q = G @ (np.eye(2) * (Q_ALONG + Q_ACROSS) / 2) @ G.T + Q_POS * np.diag([1., 1., 0., 0.])
+    # GPS 每軸標準差約 5 m
+    R = np.eye(2) * 25.
     return P0, Q, R
+
+
+def directional_Q(velocity, base_Q):
+    """依目前估計的行進方向，把加速度雜訊拆成切向 / 法向兩個分量。"""
+    speed = float(np.hypot(velocity[0], velocity[1]))
+    if speed < 0.5:  # 速度太小、方向不可靠時退回基準 Q
+        return base_Q
+    t = np.array([velocity[0], velocity[1]]) / speed  # 切向單位向量
+    n = np.array([-t[1], t[0]])                        # 法向單位向量
+    A = Q_ALONG * np.outer(t, t) + Q_ACROSS * np.outer(n, n)
+    return G @ A @ G.T + Q_POS * np.diag([1., 1., 0., 0.])
 
 
 class Tracker:
@@ -31,7 +53,16 @@ class Tracker:
         self.P0, self.Q, self.R = make_matrices()
         self.filters = {}
 
-        # TODO：為每位外送員建立 Kalman Filter
+        # 為每位外送員建立 Kalman Filter
+        for did in self.driver_ids:
+            kf = KalmanFilter(dim_x=4, dim_z=2)
+            kf.F = F.copy()
+            kf.H = H.copy()
+            kf.P = self.P0.copy()
+            kf.Q = self.Q.copy()
+            kf.R = self.R.copy()
+            self.filters[did] = kf
+        self.initialized = {did: False for did in self.driver_ids}
 
     def step(self, observations):
         """
@@ -64,5 +95,20 @@ class Tracker:
 
             3. 回傳所有外送員的估計位置。
         """
-        # TODO：完成上述追蹤流程
-        raise NotImplementedError("請完成 Tracker.step()")
+        estimates = {}
+        for did in self.driver_ids:
+            kf = self.filters[did]
+            z = observations.get(did)
+            if not self.initialized[did]:
+                # 第一次收到 GPS：用 GPS 初始化位置，速度設為 0
+                if z is not None:
+                    kf.x = np.array([float(z[0]), float(z[1]), 0., 0.])
+                    kf.P = self.P0.copy()
+                    self.initialized[did] = True
+            else:
+                kf.Q = directional_Q(kf.x[2:4], self.Q)
+                kf.predict()
+                if z is not None:
+                    kf.update(np.array([float(z[0]), float(z[1])]))
+            estimates[did] = (float(kf.x[0]), float(kf.x[1]))
+        return estimates
