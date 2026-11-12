@@ -1,0 +1,2 @@
+numpy==2.2.6
+filterpy==1.4.5
